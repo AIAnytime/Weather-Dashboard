@@ -6,25 +6,100 @@ import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-from windrose import WindroseAxes
-import matplotlib.cm as cm
 
 # ------------------------------------------------------------------
-# PAGE CONFIG & STYLES
+# PAGE CONFIG
 # ------------------------------------------------------------------
 st.set_page_config(layout="wide", page_title="Weather Dashboard", page_icon="☁️")
+
+# ------------------------------------------------------------------
+# THEME & METRIC CARD STYLES (Dark + Colored KPI Tiles)
+# ------------------------------------------------------------------
 st.markdown("""
 <style>
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 20px;
-    }
-    .block-container { padding-top: 2rem; }
-    div[data-testid="stMetric"] {
-        background-color: #f0f2f6;
-        border-radius: 6px;
-        padding: 10px;
-        border: 1px solid #e0e0e0;
-    }
+/* Base dark environment */
+html, body, [data-testid="stAppViewContainer"] {
+    background: #0d1117;
+    color: #dce3ec;
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+.stTabs [role="tablist"] button[role="tab"][aria-selected="true"] {
+    border-bottom: 3px solid #ec6b2d !important;
+}
+
+/* Metric tiles */
+div[data-testid="stMetric"] {
+    background: linear-gradient(135deg, var(--grad-a, #1e2530), var(--grad-b, #161b22));
+    border: 1px solid #2a313c;
+    border-radius: 16px;
+    padding: 14px 18px 12px 18px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.45);
+    transition: all .18s ease;
+    min-height: 110px;
+}
+div[data-testid="stMetric"]::after {
+    content:"";
+    position:absolute;
+    inset:0;
+    background: radial-gradient(circle at 85% 15%, rgba(255,255,255,0.18), transparent 60%);
+    opacity:.18;
+    mix-blend-mode: overlay;
+    pointer-events:none;
+}
+div[data-testid="stMetric"]:hover {
+    border-color:#3d4754;
+    box-shadow:0 4px 14px -2px rgba(0,0,0,0.55);
+    transform:translateY(-2px);
+}
+
+/* Metric label */
+div[data-testid="stMetric"] label {
+    font-size: .70rem;
+    letter-spacing:.08em;
+    text-transform: uppercase;
+    font-weight:600;
+    color:#9fb1c2 !important;
+    opacity:.95;
+    margin-bottom:2px;
+}
+/* Metric value */
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    font-size: 1.65rem;
+    font-weight:600;
+    line-height:1.15;
+    color: var(--value-color, #ffffff);
+    text-shadow:0 0 6px rgba(0,0,0,0.4);
+}
+/* Delta (future use) */
+div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
+    font-size:.75rem;
+    font-weight:600;
+}
+
+/* Palette assignment by order per row (using hidden marker divs) */
+.kpi-row.first  + div div[data-testid="stMetric"]:nth-of-type(1) { --grad-a:#1e3a8a; --grad-b:#172554; --value-color:#82cfff; }
+.kpi-row.first  + div div[data-testid="stMetric"]:nth-of-type(2) { --grad-a:#581c87; --grad-b:#3b0a53; --value-color:#d8b4fe; }
+.kpi-row.first  + div div[data-testid="stMetric"]:nth-of-type(3) { --grad-a:#92400e; --grad-b:#4a1d04; --value-color:#ffcb6b; }
+.kpi-row.first  + div div[data-testid="stMetric"]:nth-of-type(4) { --grad-a:#7f1d1d; --grad-b:#471010; --value-color:#ffb4a2; }
+
+.kpi-row.second + div div[data-testid="stMetric"]:nth-of-type(1) { --grad-a:#064e3b; --grad-b:#022c22; --value-color:#6ee7b7; }
+.kpi-row.second + div div[data-testid="stMetric"]:nth-of-type(2) { --grad-a:#312e81; --grad-b:#11103a; --value-color:#a5b4fc; }
+.kpi-row.second + div div[data-testid="stMetric"]:nth-of-type(3) { --grad-a:#024059; --grad-b:#021d29; --value-color:#7dd3fc; }
+.kpi-row.second + div div[data-testid="stMetric"]:nth-of-type(4) { --grad-a:#701a36; --grad-b:#3a0d1d; --value-color:#f9a8d4; }
+
+/* DataFrame header styling */
+[data-testid="stDataFrame"] thead tr th {
+    background:#18202a !important;
+    color:#d0d6dc !important;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: #11151a; }
+::-webkit-scrollbar-thumb { background: #26303a; border-radius:8px; }
+::-webkit-scrollbar-thumb:hover { background:#32404d; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -33,12 +108,9 @@ st.markdown("""
 # ------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("Weather_EDA_V2.0.csv")
-
-    # Dates
+    df = pd.read_csv("data/Weather_EDA_V2.0.csv")
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
     df = df.sort_values('Date')
-    # Core temporal fields
     df['Year']      = df['Date'].dt.year
     df['Month']     = df['Date'].dt.month
     df['MonthName'] = df['Date'].dt.month_name()
@@ -46,30 +118,25 @@ def load_data():
     df['DayOfWeek'] = df['Date'].dt.day_name()
     df['WeekNum']   = df['Date'].dt.isocalendar().week
 
-    # Season mapping (STANDARD seasonal mapping)
     season_map_std = {12:'Winter',1:'Winter',2:'Winter',
                       3:'Spring',4:'Spring',5:'Spring',
                       6:'Summer',7:'Summer',8:'Summer',
                       9:'Autumn',10:'Autumn',11:'Autumn'}
     df['Season'] = df['Month'].map(season_map_std)
 
-    # Flags
     df['IsRainy']   = df['Rainfall'] > 0
-    df['IsWeekend'] = df['DayOfWeek'].isin(['Saturday', 'Sunday'])
+    df['IsWeekend'] = df['DayOfWeek'].isin(['Saturday','Sunday'])
 
-    # Core derived metrics
-    df['AvgTemp']        = (df['MinTemp'] + df['MaxTemp']) / 2
-    df['AvgHumidity']    = (df['Humidity9am'] + df['Humidity3pm']) / 2
+    df['AvgTemp']           = (df['MinTemp'] + df['MaxTemp']) / 2
+    df['AvgHumidity']       = (df['Humidity9am'] + df['Humidity3pm']) / 2
     df['HumidityVariation'] = (df['Humidity3pm'] - df['Humidity9am']).abs()
 
-    # Temperature Stability Index (TSI)  (handle division safety)
     denom = (df['MaxTemp'].abs() + df['MinTemp'].abs())
     df['TSI'] = 1 - (df['MaxTemp'] - df['MinTemp']).abs() / denom.replace(0, np.nan)
     df['TSI'] = df['TSI'].clip(0, 1)
 
-    # Avg Wind Speed if columns exist
-    if {'WindSpeed9am', 'WindSpeed3pm'}.issubset(df.columns):
-        df['AvgWindSpeed'] = df[['WindSpeed9am', 'WindSpeed3pm']].mean(axis=1)
+    if {'WindSpeed9am','WindSpeed3pm'}.issubset(df.columns):
+        df['AvgWindSpeed'] = df[['WindSpeed9am','WindSpeed3pm']].mean(axis=1)
     elif 'WindSpeed3pm' in df.columns:
         df['AvgWindSpeed'] = df['WindSpeed3pm']
     elif 'WindSpeed9am' in df.columns:
@@ -77,14 +144,12 @@ def load_data():
     else:
         df['AvgWindSpeed'] = np.nan
 
-    # Rolling metrics (7d) – for optional plots
     df['AvgTemp_7d']  = df['AvgTemp'].rolling(7, min_periods=3).mean()
     df['Rain_7d_Sum'] = df['Rainfall'].rolling(7, min_periods=3).sum()
-
     return df
 
 # ------------------------------------------------------------------
-# AGGREGATION FUNCTIONS (UPDATED for KPI completeness)
+# AGGREGATIONS
 # ------------------------------------------------------------------
 def aggregate_by_week(df):
     week = (df.groupby(['Year','WeekNum'])
@@ -141,7 +206,7 @@ def aggregate_by_season(df):
     return season
 
 # ------------------------------------------------------------------
-# VISUALIZATION HELPERS
+# VISUALIZATIONS
 # ------------------------------------------------------------------
 def plot_wind_polar(wind_data, wind_dir_column, wind_speed_column, title="Wind Direction & Speed"):
     valid = wind_data.dropna(subset=[wind_dir_column, wind_speed_column])
@@ -149,22 +214,18 @@ def plot_wind_polar(wind_data, wind_dir_column, wind_speed_column, title="Wind D
         fig, ax = plt.subplots(figsize=(6,6))
         ax.text(0.5, 0.5, 'Insufficient wind data', ha='center', va='center', transform=ax.transAxes)
         return fig
-
     counts = valid[wind_dir_column].value_counts()
     speed_by_dir = valid.groupby(wind_dir_column)[wind_speed_column].mean()
     fig, ax = plt.subplots(figsize=(9,5))
-    bars = ax.bar(counts.index, counts.values, alpha=0.8)
+    bars = ax.bar(counts.index, counts.values, alpha=0.85)
     speeds = [speed_by_dir.get(d, 0) for d in counts.index]
     norm = plt.Normalize(min(speeds), max(speeds) if max(speeds)>0 else 1)
     colors = plt.cm.viridis(norm(speeds))
     for b, c in zip(bars, colors): b.set_color(c)
-    ax.set_title(title)
-    ax.set_xlabel("Wind Direction")
-    ax.set_ylabel("Frequency")
+    ax.set_title(title); ax.set_xlabel("Wind Direction"); ax.set_ylabel("Frequency")
     ax.tick_params(axis='x', rotation=45)
     if speeds:
-        ax.text(0.99, 0.02,
-                f"Speed Range: {min(speeds):.1f}-{max(speeds):.1f}",
+        ax.text(0.99, 0.02, f"Speed Range: {min(speeds):.1f}-{max(speeds):.1f}",
                 ha='right', va='bottom', transform=ax.transAxes, fontsize=9)
     fig.tight_layout()
     return fig
@@ -175,17 +236,18 @@ def plot_temp_trends(data, time_col):
         fig.add_trace(go.Scatter(x=data[time_col], y=data['AvgTemp'],
                                  mode='lines', name='Avg Temp', line=dict(width=2)))
     if {'MinTemp','MaxTemp'}.issubset(data.columns):
-        fig.add_trace(go.Scatter(x=data[time_col], y=data['MinTemp'], mode='lines',
-                                 name='Min Temp', line=dict(width=1)))
-        fig.add_trace(go.Scatter(x=data[time_col], y=data['MaxTemp'], mode='lines',
-                                 name='Max Temp', line=dict(width=1)))
+        fig.add_trace(go.Scatter(x=data[time_col], y=data['MinTemp'],
+                                 mode='lines', name='Min Temp', line=dict(width=1)))
+        fig.add_trace(go.Scatter(x=data[time_col], y=data['MaxTemp'],
+                                 mode='lines', name='Max Temp', line=dict(width=1)))
     if 'AvgTemp_7d' in data.columns and data['AvgTemp_7d'].notna().sum() > 5:
         fig.add_trace(go.Scatter(x=data[time_col], y=data['AvgTemp_7d'],
                                  mode='lines', name='7d Avg Temp', line=dict(dash='dot', width=2)))
     fig.update_layout(title='Temperature Trends',
                       xaxis_title='Time Period', yaxis_title='Temperature (°C)',
                       height=420, margin=dict(l=10,r=10,t=50,b=10),
-                      legend=dict(orientation='h', y=1.03, x=1, xanchor='right'))
+                      legend=dict(orientation='h', y=1.03, x=1, xanchor='right'),
+                      template='plotly_dark')
     return fig
 
 def plot_rainfall(data, time_col):
@@ -198,7 +260,8 @@ def plot_rainfall(data, time_col):
             t.name = '7d Rain Sum'
             t.line.width = 2
             fig.add_trace(t)
-    fig.update_layout(height=420, margin=dict(l=10,r=10,t=50,b=10), coloraxis_showscale=False)
+    fig.update_layout(height=420, margin=dict(l=10,r=10,t=50,b=10),
+                      coloraxis_showscale=False, template='plotly_dark')
     return fig
 
 def plot_humidity_boxplot(df, group_col):
@@ -225,9 +288,7 @@ def detect_outliers(df, cols):
             out[c] = ((df[c]<lb)|(df[c]>ub)).sum()
     return out
 
-# ------------------------------------------------------------------
-# SPELL METRICS (optional)
-# ------------------------------------------------------------------
+# Spell metrics
 def longest_consecutive(mask_series):
     run = max_run = 0
     for v in mask_series:
@@ -237,7 +298,6 @@ def longest_consecutive(mask_series):
         else:
             run = 0
     return max_run
-
 def spell_metrics(df):
     dry = (df['Rainfall'] == 0)
     wet = (df['Rainfall'] > 0)
@@ -247,37 +307,32 @@ def spell_metrics(df):
     }
 
 # ------------------------------------------------------------------
-# MAIN APP
+# MAIN
 # ------------------------------------------------------------------
 def main():
     st.title("Weather Dashboard & EDA Tool")
-
     with st.spinner("Loading weather data..."):
         df = load_data()
 
     tab_dashboard, tab_eda = st.tabs(["Dashboard", "EDA & Analysis"])
 
-    # ===================== DASHBOARD TAB ============================
+    # ===================== DASHBOARD =====================
     with tab_dashboard:
         st.sidebar.header("Filters")
 
-        time_agg = st.sidebar.radio("Time Aggregation",
-                                    ["Daily","Weekly","Monthly"], index=0)
+        time_agg = st.sidebar.radio("Time Aggregation", ["Daily","Weekly","Monthly"], index=0)
 
-        # Year filter
         years = sorted(df['Year'].dropna().unique())
         selected_years = st.sidebar.multiselect("Select Years",
                                                 years,
                                                 default=years[-5:] if len(years)>5 else years)
         filtered = df[df['Year'].isin(selected_years)] if selected_years else df.copy()
 
-        # Season filter
         seasons = sorted(filtered['Season'].dropna().unique())
         selected_seasons = st.sidebar.multiselect("Select Seasons", seasons, default=[])
         if selected_seasons:
             filtered = filtered[filtered['Season'].isin(selected_seasons)]
 
-        # Month filter (Daily / Weekly)
         if time_agg in ("Daily","Weekly"):
             months = sorted(filtered['Month'].unique())
             month_names = [datetime(2000,m,1).strftime('%B') for m in months]
@@ -286,7 +341,6 @@ def main():
                 sel_month_nums = [datetime.strptime(m,'%B').month for m in selected_month_names]
                 filtered = filtered[filtered['Month'].isin(sel_month_nums)]
 
-        # Rain filter
         rain_filter = st.sidebar.radio("Precipitation Filter",
                                        ["All Days","Rainy Days Only","Dry Days Only"], index=0)
         if rain_filter == "Rainy Days Only":
@@ -294,14 +348,12 @@ def main():
         elif rain_filter == "Dry Days Only":
             filtered = filtered[~filtered['IsRainy']]
 
-        # Wind direction filter
         if 'WindDir3pm' in filtered.columns:
             wind_dirs = sorted(filtered['WindDir3pm'].dropna().unique())
             selected_wdirs = st.sidebar.multiselect("Wind Direction (3pm)", wind_dirs, default=[])
             if selected_wdirs:
                 filtered = filtered[filtered['WindDir3pm'].isin(selected_wdirs)]
 
-        # (Optional) Weekend filter
         weekend_opt = st.sidebar.selectbox("Weekend Filter",
                                            ["All","Weekdays Only","Weekends Only"], index=0)
         if weekend_opt == "Weekdays Only":
@@ -309,62 +361,59 @@ def main():
         elif weekend_opt == "Weekends Only":
             filtered = filtered[filtered['IsWeekend']]
 
-        # Apply aggregation
         if time_agg == "Weekly":
-            display_df = aggregate_by_week(filtered)
-            time_col = 'TimeLabel'
+            display_df = aggregate_by_week(filtered); time_col = 'TimeLabel'
         elif time_agg == "Monthly":
-            display_df = aggregate_by_month(filtered)
-            time_col = 'TimeLabel'
+            display_df = aggregate_by_month(filtered); time_col = 'TimeLabel'
         else:
-            display_df = filtered.copy()
-            display_df['TimeLabel'] = display_df['Date']
-            time_col = 'TimeLabel'
+            display_df = filtered.copy(); display_df['TimeLabel'] = display_df['Date']; time_col = 'TimeLabel'
 
         if len(display_df)==0:
             st.warning("No data for selected filters.")
             return
 
-        # ---------------- KPI ROWS ----------------
+        # KPI ROWS --------------------------------------------------
         st.subheader("Key Weather Metrics")
 
-        k1, k2, k3, k4 = st.columns(4)
-        avg_temp = display_df['AvgTemp'].mean()
-        k1.metric("Average Temperature", f"{avg_temp:.1f}°C")
+        # Hidden markers for CSS palette scoping
+        st.markdown('<div class="kpi-row first"></div>', unsafe_allow_html=True)
 
-        rainy_days = display_df['IsRainy'].sum() if 'IsRainy' in display_df.columns else (
-            display_df['RainyDays'].sum() if 'RainyDays' in display_df.columns else 0)
-        if time_agg == "Daily":
-            rain_pct = (rainy_days / len(display_df))*100 if len(display_df) else 0
-            k2.metric("Rainy Days (%)", f"{int(rainy_days)} ({rain_pct:.1f}%)")
-        else:
-            total_days = display_df['TotalDays'].sum() if 'TotalDays' in display_df.columns else len(display_df)
-            rain_pct = (rainy_days / total_days)*100 if total_days>0 else 0
-            k2.metric("Rainy Days (%)", f"{int(rainy_days)} ({rain_pct:.1f}%)")
+        row1 = st.columns(4)
+        with row1[0]:
+            avg_temp = display_df['AvgTemp'].mean()
+            st.metric("Average Temperature", f"{avg_temp:.1f}°C")
+        with row1[1]:
+            rainy_days = display_df['IsRainy'].sum() if 'IsRainy' in display_df.columns else (
+                display_df['RainyDays'].sum() if 'RainyDays' in display_df.columns else 0)
+            if time_agg == "Daily":
+                rain_pct = (rainy_days / len(display_df))*100 if len(display_df) else 0
+            else:
+                total_days = display_df['TotalDays'].sum() if 'TotalDays' in display_df.columns else len(display_df)
+                rain_pct = (rainy_days / total_days)*100 if total_days>0 else 0
+            st.metric("Rainy Days (%)", f"{int(rainy_days)} ({rain_pct:.1f}%)")
+        with row1[2]:
+            avg_humidity = display_df['AvgHumidity'].mean() if 'AvgHumidity' in display_df else filtered['AvgHumidity'].mean()
+            st.metric("Average Humidity", f"{avg_humidity:.1f}%")
+        with row1[3]:
+            total_rain = display_df['Rainfall'].sum()
+            st.metric("Total Rainfall", f"{total_rain:.1f} mm")
 
-        avg_humidity = display_df['AvgHumidity'].mean() if 'AvgHumidity' in display_df else filtered['AvgHumidity'].mean()
-        k3.metric("Average Humidity", f"{avg_humidity:.1f}%")
+        st.markdown('<div class="kpi-row second"></div>', unsafe_allow_html=True)
 
-        total_rain = display_df['Rainfall'].sum()
-        k4.metric("Total Rainfall", f"{total_rain:.1f} mm")
+        row2 = st.columns(4)
+        with row2[0]:
+            st.metric("Temp Stability Index (TSI)", f"{display_df['TSI'].mean():.3f}")
+        with row2[1]:
+            hv = display_df['HumidityVar'].mean() if 'HumidityVar' in display_df else filtered['HumidityVariation'].mean()
+            st.metric("Humidity Variation (avg Δ%)", f"{hv:.1f}")
+        with row2[2]:
+            st.metric("Avg Wind Speed", f"{display_df['AvgWindSpeed'].mean():.1f} km/h")
+        with row2[3]:
+            rainfall_intensity = (display_df['Rainfall'].sum() /
+                                  display_df['TotalDays'].sum()) if 'TotalDays' in display_df else display_df['Rainfall'].mean()
+            st.metric("Rainfall Intensity (mm/day)", f"{rainfall_intensity:.2f}")
 
-        # SECOND KPI ROW (TSI, Humidity Variation, Wind, Rainfall Intensity)
-        k5, k6, k7, k8 = st.columns(4)
-        if 'TSI' in display_df:
-            k5.metric("Temp Stability Index (TSI)", f"{display_df['TSI'].mean():.3f}")
-        if 'HumidityVar' in display_df:
-            k6.metric("Humidity Variation (avg Δ%)",
-                      f"{display_df['HumidityVar'].mean():.1f}")
-        else:
-            k6.metric("Humidity Variation (avg Δ%)",
-                      f"{filtered['HumidityVariation'].mean():.1f}")
-        if 'AvgWindSpeed' in display_df:
-            k7.metric("Avg Wind Speed", f"{display_df['AvgWindSpeed'].mean():.1f} km/h")
-        rainfall_intensity = (display_df['Rainfall'].sum() /
-                              display_df['TotalDays'].sum()) if 'TotalDays' in display_df else display_df['Rainfall'].mean()
-        k8.metric("Rainfall Intensity (mm/day)", f"{rainfall_intensity:.2f}")
-
-        # ---------------- CHARTS ----------------
+        # CHARTS ----------------------------------------------------
         st.subheader("Temperature Trends")
         st.plotly_chart(plot_temp_trends(display_df, time_col), use_container_width=True)
 
@@ -402,7 +451,7 @@ def main():
             else:
                 st.info("Daily aggregation required for wind direction detail.")
 
-        # ---------------- SEASONAL & DOW ANALYSIS ----------------
+        # SEASONAL / DOW --------------------------------------------
         with st.expander("Seasonal & Day-of-Week KPIs"):
             seasonal_df = aggregate_by_season(filtered)
             st.markdown("**Seasonal Summary**")
@@ -414,7 +463,6 @@ def main():
                                 AvgWind=('AvgWindSpeed','mean'),
                                 Rainfall=('Rainfall','mean'))
                            .reset_index())
-            # sort by weekday order
             weekday_order = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
             dow['DayOfWeek'] = pd.Categorical(dow['DayOfWeek'], categories=weekday_order, ordered=True)
             st.markdown("**Average Metrics by Day of Week**")
@@ -424,7 +472,7 @@ def main():
             st.markdown("**Spell Metrics (Current Filter)**")
             st.write(spells)
 
-        # ---------------- DOWNLOADS ----------------
+        # DOWNLOADS -------------------------------------------------
         with st.expander("Downloads"):
             st.download_button("Download Filtered Daily Data (CSV)",
                                data=filtered.to_csv(index=False),
@@ -445,10 +493,9 @@ def main():
                                file_name="seasonal_weather.csv",
                                mime="text/csv")
 
-    # ===================== EDA TAB ================================
+    # ===================== EDA TAB =====================
     with tab_eda:
         st.header("Exploratory Data Analysis")
-
         eda_df = df.copy()
 
         st.subheader("Data Overview")
@@ -516,7 +563,8 @@ def main():
                       .sort_values('Outlier Count', ascending=False))
             fig2 = px.bar(out_df, x='Column', y='Outlier Count',
                           title='Outliers per Column',
-                          color='Outlier Count', text_auto=True)
+                          color='Outlier Count', text_auto=True,
+                          template='plotly_dark')
             st.plotly_chart(fig2, use_container_width=True)
 
             chosen = st.selectbox("Boxplot column:", outlier_cols)
@@ -539,7 +587,8 @@ def main():
                                  [c for c in ['MinTemp','MaxTemp','Rainfall','Humidity9am',
                                               'Humidity3pm','AvgWindSpeed'] if c in ts_df.columns])
         ts_fig = px.line(ts_df, x='Date', y=ts_metric,
-                         title=f"Monthly {ts_metric} Over Time")
+                         title=f"Monthly {ts_metric} Over Time",
+                         template='plotly_dark')
         st.plotly_chart(ts_fig, use_container_width=True)
 
 # ------------------------------------------------------------------
