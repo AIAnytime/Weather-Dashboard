@@ -108,7 +108,7 @@ div[data-testid="stMetric"] [data-testid="stMetricDelta"] {
 # ------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/Weather_EDA_V2.0.csv")
+    df = pd.read_csv("Weather_EDA_V2.0.csv")
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
     df = df.sort_values('Date')
     df['Year']      = df['Date'].dt.year
