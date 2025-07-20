@@ -33,7 +33,7 @@ st.markdown("""
 # ------------------------------------------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/Weather_EDA_V2.0.csv")
+    df = pd.read_csv("Weather_EDA_V2.0.csv")
 
     # Dates
     df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
@@ -52,12 +52,6 @@ def load_data():
                       6:'Summer',7:'Summer',8:'Summer',
                       9:'Autumn',10:'Autumn',11:'Autumn'}
     df['Season'] = df['Month'].map(season_map_std)
-
-    # (If you want original custom mapping instead, uncomment and override)
-    # season_mapping_custom = {1:'Summer',2:'Summer',3:'Autumn',4:'Autumn',5:'Autumn',
-    #                          6:'Winter',7:'Winter',8:'Winter',9:'Spring',10:'Spring',
-    #                          11:'Spring',12:'Summer'}
-    # df['Season'] = df['Month'].map(season_mapping_custom)
 
     # Flags
     df['IsRainy']   = df['Rainfall'] > 0
@@ -86,12 +80,6 @@ def load_data():
     # Rolling metrics (7d) – for optional plots
     df['AvgTemp_7d']  = df['AvgTemp'].rolling(7, min_periods=3).mean()
     df['Rain_7d_Sum'] = df['Rainfall'].rolling(7, min_periods=3).sum()
-
-    # OPTIONAL anomalies / extremes (commented out - enable if needed)
-    # df['Temp_Z']       = (df['AvgTemp'] - df['AvgTemp'].mean()) / df['AvgTemp'].std()
-    # df['Temp_Anomaly'] = df['Temp_Z'].abs() > 2
-    # df['ExtremeRain']  = df['Rainfall'] > df['Rainfall'].quantile(0.95)
-    # df['ExtremeHeat']  = df['MaxTemp'] > df['MaxTemp'].quantile(0.95)
 
     return df
 
@@ -161,13 +149,6 @@ def plot_wind_polar(wind_data, wind_dir_column, wind_speed_column, title="Wind D
         fig, ax = plt.subplots(figsize=(6,6))
         ax.text(0.5, 0.5, 'Insufficient wind data', ha='center', va='center', transform=ax.transAxes)
         return fig
-
-    # Optional: true wind rose (uncomment to switch)
-    # fig = plt.figure(figsize=(6,6))
-    # ax = WindroseAxes.from_ax(fig=fig)
-    # ax.bar(valid[wind_dir_column], valid[wind_speed_column], normed=True, opening=0.8, edgecolor='white')
-    # ax.set_legend()
-    # return fig
 
     counts = valid[wind_dir_column].value_counts()
     speed_by_dir = valid.groupby(wind_dir_column)[wind_speed_column].mean()
