@@ -79,7 +79,7 @@ pip install -r requirements.txt
 To run the full interactive dashboard with all features:
 
 ```
-streamlit run main.py
+streamlit run app.py
 ```
 
 ### Option 2: Simple KPI Dashboard (via Jupyter Notebook)
@@ -113,7 +113,7 @@ To stop the dashboard, press `Ctrl+C` in the terminal or command prompt where it
 
 - **Error: Port is already in use**: Try running with a different port
   ```
-  streamlit run main.py --server.port 8502
+  streamlit run app.py --server.port 8502
   ```
 
 - **Package installation issues**: Make sure you're using a recent version of pip
